@@ -7,7 +7,7 @@ from .models import Booking
 from datetime import datetime
 import json
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 
 # Create your views here.
@@ -46,6 +46,41 @@ def display_menu_item(request, pk=None):
         menu_item = "" 
     return render(request, 'menu_item.html', {"menu_item": menu_item}) 
 
+
 @csrf_exempt
 def bookings(request):
-    pass
+    if request.method == "POST":
+        # The request body is not JSON-decoded yet, so we must load it.
+        # Use request.body to get the raw content.
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
+        
+        # Correct the typo: 'reservations_slot' should be 'reservation_slot'
+        exist = Booking.objects.filter(
+            reservation_date=data['reservation_date']
+        ).filter(
+            reservation_slot=data['reservation_slot']
+        ).exists()
+        
+        if not exist:
+            booking = Booking(
+                first_name=data['first_name'],
+                reservation_date=data['reservation_date'],
+                reservation_slot=data['reservation_slot'],
+            )
+            booking.save()
+            # Return a success response
+            return JsonResponse({'message': 'Booking created successfully'}, status=201)
+        else:
+            # Return a JSON response for the error
+            return JsonResponse({'error': 1, 'message': 'Booking slot is already taken'}, status=409)
+    
+    # This block handles the GET request, which is what the front-end fetch calls
+    date = request.GET.get('date', datetime.today().date())
+    bookings = Booking.objects.all().filter(reservation_date=date)
+    booking_json = serializers.serialize('json', bookings)
+    
+    # Return the JSON response, not a rendered HTML template
+    return HttpResponse(booking_json, content_type='application/json')
